@@ -9,8 +9,7 @@ COPY . .
 
 RUN mkdir -p logs models
 
-# retrain model INSIDE container
-RUN python src/vectorize.py && python src/train.py
+
 
 EXPOSE 8000
 
