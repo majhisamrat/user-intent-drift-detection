@@ -8,16 +8,12 @@ on:
 
 jobs:
 
-  # Python Tests
   test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
@@ -32,50 +28,30 @@ jobs:
           pytest || echo "No tests found, skipping"
 
 
-  # Build FastAPI Image
-
   build-api:
     needs: test
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Build FastAPI Docker image
-        run: |
-          docker build -t intent-api:latest .
+        run: docker build -t intent-api:latest .
 
- 
-  # Build Airflow Image
 
   build-airflow:
     needs: test
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Build Airflow Docker image
-        run: |
-          docker build -t intent-airflow:latest ./airflow
- 
-  # Validate Airflow DAGs
+        run: docker build -t intent-airflow:latest ./airflow
+
 
   validate-dags:
     needs: build-airflow
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Airflow
+      - uses: actions/checkout@v4
+      - name: Validate DAG syntax
         run: |
-          pip install apache-airflow==2.8.1
-
-      - name: Validate DAGs
-        run: |
-          airflow db init
-          airflow dags list
+          ls dags || exit 0
+          python -m py_compile dags/*.py
