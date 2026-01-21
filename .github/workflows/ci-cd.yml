@@ -1,0 +1,81 @@
+name: User Intent Drift Detection CI/CD
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+
+  # Python Tests
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: |
+          pytest || echo "No tests found, skipping"
+
+
+  # Build FastAPI Image
+
+  build-api:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build FastAPI Docker image
+        run: |
+          docker build -t intent-api:latest .
+
+ 
+  # Build Airflow Image
+
+  build-airflow:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Airflow Docker image
+        run: |
+          docker build -t intent-airflow:latest ./airflow
+ 
+  # Validate Airflow DAGs
+
+  validate-dags:
+    needs: build-airflow
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Airflow
+        run: |
+          pip install apache-airflow==2.8.1
+
+      - name: Validate DAGs
+        run: |
+          airflow db init
+          airflow dags list

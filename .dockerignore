@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+
+# Airflow runtime (VERY IMPORTANT)
+logs/
+airflow.db
+airflow.cfg
+webserver_config.py
+
+# ML artifacts (mounted as volumes)
+models/
+mlruns/
+
+# OS
+.DS_Store
+Thumbs.db
+
+data/
+metrics/
+venv/
+
+
+
