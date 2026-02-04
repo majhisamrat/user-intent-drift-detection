@@ -33,8 +33,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build FastAPI Docker image
-        run: docker build -t intent-api:latest .
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: majhisamrat/intent-api:latest
 
 
   build-airflow:
@@ -42,8 +53,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build Airflow Docker image
-        run: docker build -t intent-airflow:latest ./airflow
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push Airflow image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./airflow
+          push: true
+          tags: majhisamrat/intent-airflow:latest
 
 
   validate-dags:
