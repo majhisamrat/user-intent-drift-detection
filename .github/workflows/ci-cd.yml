@@ -31,18 +31,13 @@ jobs:
   build-api:
     needs: test
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-    
-      - name: Debug secret
-        run: echo "USERNAME = ${{ secrets.DOCKERHUB_USERNAME }}"
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push API image
@@ -50,8 +45,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: majhisamrat/intent-api:latest
-
+          tags: samratml2001/intent-api:latest
 
 
   build-airflow:
@@ -71,7 +65,7 @@ jobs:
         with:
           context: ./airflow
           push: true
-          tags: majhisamrat/intent-airflow:latest
+          tags: samratml2001/intent-airflow:latest
 
 
   validate-dags:
@@ -79,8 +73,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Validate DAG syntax
         run: |
-          ls dags || exit 0
-          python -m py_compile dags/*.py
-  
+          ls airflow/dags || exit 0
+          python -m py_compile airflow/dags/*.py
