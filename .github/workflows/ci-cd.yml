@@ -31,13 +31,18 @@ jobs:
   build-api:
     needs: test
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
+
+    
+      - name: Debug secret
+        run: echo "USERNAME = ${{ secrets.DOCKERHUB_USERNAME }}"
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push API image
@@ -46,6 +51,7 @@ jobs:
           context: .
           push: true
           tags: majhisamrat/intent-api:latest
+
 
 
   build-airflow:
