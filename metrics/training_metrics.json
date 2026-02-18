@@ -1,0 +1,7 @@
+{
+    "accuracy": 0.905994310772534,
+    "f1_score": 0.8641090863659275,
+    "model": "TensorFlow Neural Network",
+    "features": "embeddings + numeric",
+    "device": "CPU/GPU"
+}

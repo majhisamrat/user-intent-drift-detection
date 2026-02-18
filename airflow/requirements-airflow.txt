@@ -3,3 +3,5 @@ pandas
 scikit-learn
 scipy
 joblib
+apache-airflow
+apache-airflow-providers-common-sql
