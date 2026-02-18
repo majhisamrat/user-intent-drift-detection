@@ -9,13 +9,14 @@ scikit-learn
 scipy
 joblib
 
+fastapi
+uvicorn
+scikit-learn
+
+
 
 matplotlib
 seaborn
-
-
-evidently
-mlflow
 
 
 apache-airflow

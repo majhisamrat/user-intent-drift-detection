@@ -3,18 +3,44 @@ services:
     build: ./airflow
     container_name: airflow
     restart: always
-
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-
+    ports:
+      - "8080:8080"
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./src:/opt/airflow/src
       - ./models:/opt/airflow/models
-      - ./logs:/opt/airflow/logs
-      - ./data:/opt/airflow/data  
-
-    ports:
-      - "8080:8080"
-
+      - ./data:/opt/airflow/data
     command: airflow standalone
+
+
+
+
+
+
+  intent_api:
+    build: .
+    container_name: intent_api
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./models:/app/models
+      - ./logs:/logs
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  monitoring:
+    build: ./monitoring
+    container_name: intent_monitor
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./monitoring:/app 
+      - ./models:/models
+      - ./metrics:/metrics
+      - ./logs:/logs
+    depends_on:
+      - intent_api
+

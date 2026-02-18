@@ -5,8 +5,6 @@ def load_data():
     train_df = pd.read_csv("/opt/airflow/data/raw/train.csv")
     test_df = pd.read_csv("/opt/airflow/data/raw/test.csv")
 
-
-    # rename category → intent (direct intent names)
     train_df.rename(columns={"category": "intent"}, inplace=True)
     test_df.rename(columns={"category": "intent"}, inplace=True)
 

@@ -6,13 +6,13 @@ __pycache__/
 .env
 venv/
 
-# Airflow runtime (VERY IMPORTANT)
+# Airflow runtime 
 logs/
 airflow.db
 airflow.cfg
 webserver_config.py
 
-# ML artifacts (mounted as volumes)
+# ML artifacts 
 models/
 mlruns/
 

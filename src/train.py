@@ -10,7 +10,6 @@ from vectorize import (
 import pickle
 import os
 
-# create models folder if not exists
 os.makedirs("models", exist_ok=True)
 
 # initialize model
