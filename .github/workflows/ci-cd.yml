@@ -46,6 +46,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          no-cache: true
           tags: samratml2001/intent-api:latest
 
 
