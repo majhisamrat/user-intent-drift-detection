@@ -1,30 +1,30 @@
+import numpy as np
 import streamlit as st
 import json
 import os
 import requests
 import pandas as pd
-import numpy as np
-from collections import Counter
+import matplotlib.pyplot as plt
 from streamlit_autorefresh import st_autorefresh
 
 # CONFIG
 
-st.set_page_config(page_title="Intent Drift Monitor", layout="wide")
+st.set_page_config(page_title="Intent Monitoring Dashboard", layout="wide")
 
 TRAINING_METRICS_PATH = "/metrics/training_metrics.json"
-BASELINE_DIST_PATH = "/models/baseline_intent_distribution.json"
 PREDICTIONS_LOG_PATH = "/logs/predictions.jsonl"
 
 API_URL = "http://intent_api:8000/predict"
 LOCAL_API_URL = "http://localhost:8000/predict"
 
-# AUTO REFRESH (NO LOOP)
+CONFIDENCE_THRESHOLD = 0.108
+
+# AUTO REFRESH
 
 refresh = st.sidebar.checkbox("Live Monitoring (Auto Refresh)", value=True)
 
 if refresh:
-    st_autorefresh(interval=5000, key="datarefresh")
-
+    st_autorefresh(interval=5000, key="refresh")
 
 # HELPERS
 
@@ -50,25 +50,12 @@ def load_predictions(path):
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
-def calculate_distribution(intents):
-    counter = Counter(intents)
-    total = sum(counter.values())
-    return {k: v / total for k, v in counter.items()} if total > 0 else {}
-
-
-def kl_divergence(p, q):
-    score = 0.0
-    for key in q:
-        p_val = p.get(key, 1e-6)
-        q_val = q.get(key, 1e-6)
-        score += p_val * np.log(p_val / q_val)
-    return float(score)
-
 # UI
 
-st.title("🧠 User Intent Drift Monitoring Dashboard")
+st.title("🧠 User Intent Monitoring Dashboard")
 
-#  TRAINING METRICS 
+# TRAINING METRICS
+
 st.header("📊 Training Metrics")
 
 metrics = load_json(TRAINING_METRICS_PATH)
@@ -81,63 +68,76 @@ if metrics:
 else:
     st.warning("training_metrics.json not found")
 
-# ---------- LOAD DATA ----------
+# LOAD LOG DATA
+
 df_logs = load_predictions(PREDICTIONS_LOG_PATH)
-baseline_dist = load_json(BASELINE_DIST_PATH)
 
-# DISTRIBUTION 
-st.header("📈 Intent Distribution")
+# REJECTED COUNTER
 
-if not df_logs.empty and "predicted_intent" in df_logs.columns:
-
-    current_dist = calculate_distribution(df_logs["predicted_intent"])
-
-    colA, colB = st.columns(2)
-
-    with colA:
-        st.subheader("Current Distribution")
-        st.bar_chart(pd.DataFrame.from_dict(current_dist, orient="index"))
-
-    if baseline_dist:
-        with colB:
-            st.subheader("Baseline Distribution")
-            st.bar_chart(pd.DataFrame.from_dict(baseline_dist, orient="index"))
-
-        drift = kl_divergence(current_dist, baseline_dist)
-        st.metric("KL Drift Score", round(drift, 4))
-
-        if drift < 0.15:
-            st.success("🟢 Stable")
-        elif drift < 0.3:
-            st.warning("🟡 Drift Warning")
-        else:
-            st.error("🔴 Drift Detected")
-
-else:
-    st.info("No prediction logs available yet.")
-
-#  CONFIDENCE 
-st.header("📉 Confidence Monitoring")
+st.header("🚫 Low Confidence Monitoring")
 
 if not df_logs.empty and "confidence" in df_logs.columns:
-    st.line_chart(df_logs["confidence"])
 
-# LATEST 
+    rejected_df = df_logs[df_logs["confidence"] < CONFIDENCE_THRESHOLD]
+    total_rejected = len(rejected_df)
+
+    st.metric("Total Rejected Predictions", total_rejected)
+
+else:
+    st.info("No prediction data available yet.")
+
+# CONFIDENCE DISTRIBUTION 
+
+st.header("📉 Confidence Distribution")
+
+if not df_logs.empty and "confidence" in df_logs.columns:
+
+    confidence_series = df_logs["confidence"]
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Confidence Over Time")
+        st.line_chart(confidence_series)
+
+    with col2:
+        st.subheader("Confidence Histogram")
+
+        hist_values = np.histogram(confidence_series, bins=20)[0]
+        st.bar_chart(hist_values)
+
+    # Threshold line info
+    threshold = 0.169
+    rejected_count = (confidence_series < threshold).sum()
+
+    st.metric("Total Rejected Predictions", rejected_count)
+
+else:
+    st.info("No confidence data available.")
+
+
+# LATEST PREDICTION
+
+
 st.header("⚡ Latest Prediction")
 
 if not df_logs.empty:
     last = df_logs.iloc[-1]
     c1, c2 = st.columns(2)
-    c1.metric("Intent", last["predicted_intent"])
-    c2.metric("Confidence", last["confidence"])
+    c1.metric("Intent", last.get("predicted_intent", "N/A"))
+    c2.metric("Confidence", last.get("confidence", "N/A"))
 
-# TABLE 
-st.header("🗂 Prediction Logs")
+# PREDICTION TABLE
+
+st.header("🗂 Recent Predictions")
 
 if not df_logs.empty:
     st.dataframe(df_logs.tail(50), use_container_width=True)
+else:
+    st.info("No predictions logged yet.")
 
-# FASTAPI TESTER (STATIC)
+# FASTAPI TESTER
+
 
 st.divider()
 st.header("🚀 Test FastAPI /predict")
@@ -145,15 +145,12 @@ st.header("🚀 Test FastAPI /predict")
 use_local = st.toggle(
     "Use localhost API instead of docker service",
     value=False,
-    key="predict_toggle_static"
+    key="predict_toggle"
 )
 
-user_text = st.text_input(
-    "Enter message",
-    key="predict_input_static"
-)
+user_text = st.text_input("Enter message")
 
-if st.button("Predict Intent", key="predict_button_static"):
+if st.button("Predict Intent"):
     if user_text:
         try:
             url = LOCAL_API_URL if use_local else API_URL

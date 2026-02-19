@@ -9,6 +9,9 @@ import pandas as pd
 from datetime import datetime
 
 
+LOG_FILE = "logs/predictions.jsonl"
+os.makedirs("logs", exist_ok=True)
+
 # FastAPI App
 
 app = FastAPI(
@@ -79,29 +82,34 @@ def home():
 
 # Predict Endpoint
 
-@app.post("/predict", response_model=IntentResponse)
+@app.post("/predict")
 def predict_intent(request: IntentRequest):
+    text = request.text
 
-    if model is None or vectorizer is None:
-        return {"intent": "model_not_loaded", "confidence": 0.0}
-
-    cleaned_text = clean_text(request.text)
-    vec = vectorizer.transform([cleaned_text])
-
+    vec = vectorizer.transform([text])
     probs = model.predict_proba(vec)[0]
-    best_index = int(np.argmax(probs))
 
-    best_intent = model.classes_[best_index]
-    confidence = round(float(probs[best_index]), 3)
+    predicted_class = model.classes_[probs.argmax()]
+    confidence = float(max(probs))
 
-    # log prediction
-    log_prediction(request.text, best_intent, confidence)
+    # Confidence threshold logic
+    if confidence < 0.108:
+        predicted_class = "not_identified"
+
+        # Save to logs
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "text": text,
+            "confidence": confidence
+        }
+
+        with open(LOG_FILE, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
 
     return {
-        "intent": best_intent,
+        "intent": predicted_class,
         "confidence": confidence
     }
-
 
 # Model Info
 
