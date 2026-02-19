@@ -12,8 +12,7 @@ airflow.db
 airflow.cfg
 webserver_config.py
 
-# ML artifacts 
-models/
+# ML tracking (optional)
 mlruns/
 
 # OS
@@ -22,7 +21,3 @@ Thumbs.db
 
 data/
 metrics/
-venv/
-
-
-
