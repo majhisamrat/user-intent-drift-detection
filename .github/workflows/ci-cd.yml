@@ -79,4 +79,4 @@ jobs:
       - name: Validate DAG syntax
         run: |
           ls airflow/dags || exit 0
-          python -m py_compile airflow/dags/*.py
+          python -m py_compile airflow/dags/*.py 
