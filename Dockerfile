@@ -22,8 +22,7 @@ RUN mkdir -p logs models artifacts
 
 # Copy project files
 COPY app app
-COPY models models
-COPY artifacts artifacts  
+COPY models models 
 
 # Expose default port
 EXPOSE 8000
