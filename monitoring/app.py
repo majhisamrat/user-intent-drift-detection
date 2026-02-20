@@ -4,24 +4,26 @@ import json
 import os
 import requests
 import pandas as pd
-import matplotlib.pyplot as plt
 from streamlit_autorefresh import st_autorefresh
 
 # CONFIG
 
-st.set_page_config(page_title="Intent Monitoring Dashboard", layout="wide")
+st.set_page_config(
+    page_title="Intent Monitoring Dashboard",
+    layout="wide"
+)
 
 TRAINING_METRICS_PATH = "/metrics/training_metrics.json"
 PREDICTIONS_LOG_PATH = "/logs/predictions.jsonl"
 
-API_URL = "https://user-intent-api.onrender.com"
+API_URL = "https://user-intent-api.onrender.com/predict"
 LOCAL_API_URL = "http://localhost:8000/predict"
 
-CONFIDENCE_THRESHOLD = 0.108
+CONFIDENCE_THRESHOLD = 0.169
 
 # AUTO REFRESH
 
-refresh = st.sidebar.checkbox("Live Monitoring (Auto Refresh)", value=True)
+refresh = st.sidebar.checkbox("🔄 Live Monitoring", value=True)
 
 if refresh:
     st_autorefresh(interval=5000, key="refresh")
@@ -49,8 +51,7 @@ def load_predictions(path):
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
-
-# UI
+# UI START
 
 st.title("🧠 User Intent Monitoring Dashboard")
 
@@ -62,9 +63,10 @@ metrics = load_json(TRAINING_METRICS_PATH)
 
 if metrics:
     c1, c2, c3 = st.columns(3)
-    c1.metric("Accuracy", metrics.get("accuracy", "N/A"))
-    c2.metric("F1 Score", metrics.get("f1_score", "N/A"))
-    c3.metric("Loss", metrics.get("loss", "N/A"))
+
+    c1.metric("Accuracy", round(metrics.get("accuracy", 0), 4))
+    c2.metric("F1 Score", round(metrics.get("f1_score", 0), 4))
+    c3.metric("Loss", round(metrics.get("loss", 0), 4))
 else:
     st.warning("training_metrics.json not found")
 
@@ -72,21 +74,29 @@ else:
 
 df_logs = load_predictions(PREDICTIONS_LOG_PATH)
 
-# REJECTED COUNTER
+# LOW CONFIDENCE MONITORING
 
 st.header("🚫 Low Confidence Monitoring")
 
 if not df_logs.empty and "confidence" in df_logs.columns:
 
-    rejected_df = df_logs[df_logs["confidence"] < CONFIDENCE_THRESHOLD]
-    total_rejected = len(rejected_df)
+    confidence_series = df_logs["confidence"]
 
-    st.metric("Total Rejected Predictions", total_rejected)
+    rejected_count = (confidence_series < CONFIDENCE_THRESHOLD).sum()
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total Logged Predictions", len(df_logs))
+    col2.metric("Total Rejected Predictions", rejected_count)
+    col3.metric(
+        "Rejection Rate",
+        f"{round((rejected_count / len(df_logs)) * 100, 2)}%"
+    )
 
 else:
     st.info("No prediction data available yet.")
 
-# CONFIDENCE DISTRIBUTION 
+# CONFIDENCE DISTRIBUTION
 
 st.header("📉 Confidence Distribution")
 
@@ -96,25 +106,28 @@ if not df_logs.empty and "confidence" in df_logs.columns:
 
     col1, col2 = st.columns(2)
 
+    # ---- LINE CHART ----
     with col1:
         st.subheader("Confidence Over Time")
-        st.line_chart(confidence_series)
+        st.line_chart(confidence_series, height=300)
 
+    # ---- HISTOGRAM ----
     with col2:
         st.subheader("Confidence Histogram")
 
-        hist_values = np.histogram(confidence_series, bins=20)[0]
-        st.bar_chart(hist_values)
+        hist_df = pd.DataFrame({
+            "confidence": confidence_series
+        })
 
-    # Threshold line info
-    threshold = 0.169
-    rejected_count = (confidence_series < threshold).sum()
-
-    st.metric("Total Rejected Predictions", rejected_count)
+        st.bar_chart(
+            hist_df["confidence"].value_counts(
+                bins=20
+            ).sort_index(),
+            height=300
+        )
 
 else:
     st.info("No confidence data available.")
-
 
 # LATEST PREDICTION
 
@@ -123,11 +136,13 @@ st.header("⚡ Latest Prediction")
 
 if not df_logs.empty:
     last = df_logs.iloc[-1]
-    c1, c2 = st.columns(2)
-    c1.metric("Intent", last.get("predicted_intent", "N/A"))
-    c2.metric("Confidence", last.get("confidence", "N/A"))
 
-# PREDICTION TABLE
+    c1, c2 = st.columns(2)
+
+    c1.metric("Intent", last.get("predicted_intent", "N/A"))
+    c2.metric("Confidence", round(last.get("confidence", 0), 4))
+
+# RECENT TABLE
 
 st.header("🗂 Recent Predictions")
 
@@ -136,17 +151,12 @@ if not df_logs.empty:
 else:
     st.info("No predictions logged yet.")
 
-# FASTAPI TESTER
-
+# API TESTER
 
 st.divider()
 st.header("🚀 Test FastAPI /predict")
 
-use_local = st.toggle(
-    "Use localhost API instead of docker service",
-    value=False,
-    key="predict_toggle"
-)
+use_local = st.toggle("Use localhost API", value=False)
 
 user_text = st.text_input("Enter message")
 

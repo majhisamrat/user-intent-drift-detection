@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 import pickle
 import re
@@ -7,36 +7,43 @@ import json
 import os
 import pandas as pd
 from datetime import datetime
+from pathlib import Path
 
+# CONFIG
 
-LOG_FILE = "logs/predictions.jsonl"
-os.makedirs("logs", exist_ok=True)
+CONFIDENCE_THRESHOLD = 0.169
 
-# FastAPI App
+BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = BASE_DIR / "logs"
+MODEL_DIR = BASE_DIR / "models"
+METRICS_DIR = BASE_DIR / "metrics"
+
+LOG_DIR.mkdir(exist_ok=True)
+
+LOG_FILE = LOG_DIR / "predictions.jsonl"
+MODEL_PATH = MODEL_DIR / "intent_model_v1.pkl"
+VECTORIZER_PATH = MODEL_DIR / "tfidf_v1.pkl"
+
+# FASTAPI APP
 
 app = FastAPI(
     title="User Intent Classification API",
-    description="Predicts user intent with confidence and logs predictions",
-    version="1.0.0"
+    description="Predicts user intent with confidence and logs rejected predictions",
+    version="2.0.0"
 )
 
-# Load model artifacts
-
-
-MODEL_PATH = "models/intent_model_v1.pkl"
-VECTORIZER_PATH = "models/tfidf_v1.pkl"
+# LOAD MODEL
 
 model = None
 vectorizer = None
 
-if os.path.exists(MODEL_PATH):
+if MODEL_PATH.exists():
     model = pickle.load(open(MODEL_PATH, "rb"))
 
-if os.path.exists(VECTORIZER_PATH):
+if VECTORIZER_PATH.exists():
     vectorizer = pickle.load(open(VECTORIZER_PATH, "rb"))
 
-
-# Pydantic Schemas
+# SCHEMAS
 
 class IntentRequest(BaseModel):
     text: str = Field(..., example="How can I change my pin?")
@@ -45,114 +52,127 @@ class IntentResponse(BaseModel):
     intent: str
     confidence: float
 
-# Utils
+# UTILITIES
 
 def clean_text(text: str) -> str:
     text = text.lower()
     text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
     return text
 
-               
-# Logging
-
-def log_prediction(text, intent, confidence):
-
-    log_dir = "/logs"
-    os.makedirs(log_dir, exist_ok=True)
-
+def log_rejected_prediction(text, confidence):
     log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "text": text,
-        "predicted_intent": intent,
+        "predicted_intent": "not_identified",
         "confidence": confidence
     }
 
-    log_path = os.path.join(log_dir, "predictions.jsonl")
-
-    with open(log_path, "a") as f:
+    with open(LOG_FILE, "a") as f:
         f.write(json.dumps(log_entry) + "\n")
 
-
-# Routes
-
+# ROUTES
 
 @app.get("/")
 def home():
     return {"message": "Intent Classification API is running"}
 
-# Predict Endpoint
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
 
-@app.post("/predict")
+# PREDICT
+
+@app.post("/predict", response_model=IntentResponse)
 def predict_intent(request: IntentRequest):
-    text = request.text
+
+    if model is None or vectorizer is None:
+        raise HTTPException(status_code=500, detail="Model not loaded")
+
+    text = clean_text(request.text)
 
     vec = vectorizer.transform([text])
     probs = model.predict_proba(vec)[0]
 
-    predicted_class = model.classes_[probs.argmax()]
-    confidence = float(max(probs))
+    predicted_class = model.classes_[np.argmax(probs)]
+    confidence = float(np.max(probs))
 
-    # Confidence threshold logic
-    if confidence < 0.108:
+    # Threshold logic
+    if confidence < CONFIDENCE_THRESHOLD:
         predicted_class = "not_identified"
-
-        # Save to logs
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "text": text,
-            "confidence": confidence
-        }
-
-        with open(LOG_FILE, "a") as f:
-            f.write(json.dumps(log_entry) + "\n")
+        log_rejected_prediction(request.text, confidence)
 
     return {
         "intent": predicted_class,
         "confidence": confidence
     }
 
-# Model Info
+# MONITORING ENDPOINTS
 
-@app.get("/model-info")
-def model_info():
-    return {
-        "model_loaded": model is not None,
-        "vectorizer_loaded": vectorizer is not None,
-        "model_type": str(type(model)) if model else None
-    }
+@app.get("/monitor/logs")
+def get_logs():
 
+    if not LOG_FILE.exists():
+        return []
 
-# Training Metrics
-
-@app.get("/metrics")
-def metrics():
-
-    metrics_path = "metrics/training_metrics.json"
-
-    if not os.path.exists(metrics_path):
-        return {"error": "metrics file not found"}
-
-    with open(metrics_path, "r") as f:
-        data = json.load(f)
+    data = []
+    with open(LOG_FILE, "r") as f:
+        for line in f:
+            try:
+                data.append(json.loads(line))
+            except:
+                pass
 
     return data
 
 
-# Drift Status
+@app.get("/monitor/stats")
+def get_stats():
+
+    if not LOG_FILE.exists():
+        return {
+            "total_rejected": 0,
+            "average_confidence": 0
+        }
+
+    df = pd.read_json(LOG_FILE, lines=True)
+
+    if df.empty:
+        return {
+            "total_rejected": 0,
+            "average_confidence": 0
+        }
+
+    return {
+        "total_rejected": len(df),
+        "average_confidence": round(float(df["confidence"].mean()), 4)
+    }
+
+# TRAINING METRICS
+
+@app.get("/metrics")
+def metrics():
+
+    metrics_path = METRICS_DIR / "training_metrics.json"
+
+    if not metrics_path.exists():
+        return {"error": "metrics file not found"}
+
+    return json.load(open(metrics_path))
+
+# DRIFT STATUS
 
 @app.get("/drift-status")
 def drift_status():
 
-    baseline_path = "models/baseline_intent_distribution.json"
-    logs_path = "logs/predictions.jsonl"
+    baseline_path = MODEL_DIR / "baseline_intent_distribution.json"
 
-    if not os.path.exists(baseline_path):
+    if not baseline_path.exists():
         return {"error": "baseline not found"}
 
-    if not os.path.exists(logs_path):
+    if not LOG_FILE.exists():
         return {"status": "no_predictions_yet"}
 
-    logs = pd.read_json(logs_path, lines=True)
+    logs = pd.read_json(LOG_FILE, lines=True)
 
     if logs.empty:
         return {"status": "empty_logs"}
@@ -168,5 +188,17 @@ def drift_status():
     return {
         "baseline_distribution": baseline,
         "current_distribution": current_distribution,
-        "num_predictions": len(logs)
+        "num_rejected_predictions": len(logs)
+    }
+
+
+# MODEL INFO
+
+@app.get("/model-info")
+def model_info():
+    return {
+        "model_loaded": model is not None,
+        "vectorizer_loaded": vectorizer is not None,
+        "confidence_threshold": CONFIDENCE_THRESHOLD,
+        "model_type": str(type(model)) if model else None
     }
