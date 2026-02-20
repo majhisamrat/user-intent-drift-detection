@@ -14,7 +14,7 @@ st.set_page_config(page_title="Intent Monitoring Dashboard", layout="wide")
 TRAINING_METRICS_PATH = "/metrics/training_metrics.json"
 PREDICTIONS_LOG_PATH = "/logs/predictions.jsonl"
 
-API_URL = "http://intent_api:8000/predict"
+API_URL = "https://user-intent-api.onrender.com"
 LOCAL_API_URL = "http://localhost:8000/predict"
 
 CONFIDENCE_THRESHOLD = 0.108
