@@ -151,16 +151,13 @@ def get_stats():
 
 @app.get("/metrics")
 def metrics():
+
     metrics_path = METRICS_DIR / "training_metrics.json"
 
-    return {
-        "BASE_DIR": str(BASE_DIR),
-        "CURRENT_WORKING_DIR": os.getcwd(),
-        "METRICS_DIR": str(METRICS_DIR),
-        "METRICS_DIR_EXISTS": METRICS_DIR.exists(),
-        "FILE_EXISTS": metrics_path.exists(),
-        "FILES_IN_BASE_DIR": os.listdir(BASE_DIR),
-    }
+    if not metrics_path.exists():
+        return {"error": "metrics file not found"}
+
+    return json.load(open(metrics_path))
 
 # DRIFT STATUS
 
