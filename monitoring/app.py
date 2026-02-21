@@ -13,13 +13,16 @@ st.set_page_config(
     layout="wide"
 )
 
-TRAINING_METRICS_PATH = "/metrics/training_metrics.json"
-PREDICTIONS_LOG_PATH = "/logs/predictions.jsonl"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(BASE_DIR)
+
+TRAINING_METRICS_PATH = os.path.join(ROOT_DIR, "metrics", "training_metrics.json")
+PREDICTIONS_LOG_PATH = os.path.join(ROOT_DIR, "logs", "predictions.jsonl")
 
 API_URL = "https://user-intent-api.onrender.com/predict"
 LOCAL_API_URL = "http://localhost:8000/predict"
 
-CONFIDENCE_THRESHOLD = 0.169
+CONFIDENCE_THRESHOLD = 0.108
 
 # AUTO REFRESH
 
