@@ -21,8 +21,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN mkdir -p logs models artifacts
 
 # Copy project files
-COPY app app
-COPY models models 
+COPY . . 
 
 # Expose default port
 EXPOSE 8000
