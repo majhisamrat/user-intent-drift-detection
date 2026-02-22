@@ -11,7 +11,7 @@ from pathlib import Path
 
 # CONFIG
 
-CONFIDENCE_THRESHOLD = 0.169
+CONFIDENCE_THRESHOLD = 0.105
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 LOG_DIR = BASE_DIR / "logs"
