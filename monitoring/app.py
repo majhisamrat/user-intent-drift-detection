@@ -14,8 +14,6 @@ API_BASE = "https://user-intent-api.onrender.com"
 API_URL = f"{API_BASE}/predict"
 LOCAL_API_URL = "http://localhost:8000/predict"
 
-CONFIDENCE_THRESHOLD = 0.108
-
 # AUTO REFRESH
 
 refresh = st.sidebar.checkbox("🔄 Live Monitoring", value=True)
@@ -27,20 +25,18 @@ if refresh:
 
 def fetch_metrics():
     try:
-        res = requests.get(f"{API_BASE}/metrics", timeout=10)
-        return res.json()
+        return requests.get(f"{API_BASE}/metrics", timeout=10).json()
     except:
         return None
 
 
 def fetch_logs():
     try:
-        res = requests.get(f"{API_BASE}/monitor/logs", timeout=10)
-        data = res.json()
+        data = requests.get(f"{API_BASE}/monitor/logs", timeout=10).json()
         return pd.DataFrame(data) if data else pd.DataFrame()
     except:
         return pd.DataFrame()
-
+    
 # UI START
 
 st.title("🧠 User Intent Monitoring Dashboard")
@@ -64,29 +60,30 @@ else:
 
 df_logs = fetch_logs()
 
-# LOW CONFIDENCE MONITORING
+# PREDICTION OVERVIEW
 
-st.header("🚫 Low Confidence Monitoring")
+st.header("📈 Prediction Overview")
 
-if not df_logs.empty and "confidence" in df_logs.columns:
+if not df_logs.empty:
 
-    rejected_count = (df_logs["confidence"] < CONFIDENCE_THRESHOLD).sum()
+    total = len(df_logs)
+    rejected = df_logs["is_rejected"].sum()
+    accepted = total - rejected
+    rejection_rate = (rejected / total) * 100
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
 
-    col1.metric("Total Logged Predictions", len(df_logs))
-    col2.metric("Total Rejected Predictions", rejected_count)
-    col3.metric(
-        "Rejection Rate",
-        f"{round((rejected_count / len(df_logs)) * 100, 2)}%"
-    )
+    col1.metric("Total Predictions", total)
+    col2.metric("Accepted", accepted)
+    col3.metric("Rejected", rejected)
+    col4.metric("Rejection Rate", f"{round(rejection_rate, 2)}%")
 
 else:
     st.info("No prediction data available yet.")
 
-# CONFIDENCE DISTRIBUTION
+# CONFIDENCE ANALYSIS
 
-st.header("📉 Confidence Distribution")
+st.header("📉 Confidence Analysis")
 
 if not df_logs.empty and "confidence" in df_logs.columns:
 
@@ -94,19 +91,30 @@ if not df_logs.empty and "confidence" in df_logs.columns:
 
     with col1:
         st.subheader("Confidence Over Time")
-        st.line_chart(df_logs["confidence"], height=300)
+        st.line_chart(df_logs["confidence"])
 
     with col2:
         st.subheader("Confidence Histogram")
         st.bar_chart(
             df_logs["confidence"]
             .value_counts(bins=20)
-            .sort_index(),
-            height=300
+            .sort_index()
         )
 
 else:
     st.info("No confidence data available.")
+
+# INTENT DISTRIBUTION
+
+st.header("🥧 Intent Distribution")
+
+if not df_logs.empty and "predicted_intent" in df_logs.columns:
+
+    intent_counts = df_logs["predicted_intent"].value_counts()
+    st.bar_chart(intent_counts)
+
+else:
+    st.info("No intent data available.")
 
 # LATEST PREDICTION
 
@@ -115,10 +123,11 @@ st.header("⚡ Latest Prediction")
 if not df_logs.empty:
     last = df_logs.iloc[-1]
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
 
     c1.metric("Intent", last.get("predicted_intent", "N/A"))
     c2.metric("Confidence", round(last.get("confidence", 0), 4))
+    c3.metric("Rejected", last.get("is_rejected", False))
 else:
     st.info("No predictions logged yet.")
 
