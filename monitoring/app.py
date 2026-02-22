@@ -1,7 +1,4 @@
-import numpy as np
 import streamlit as st
-import json
-import os
 import requests
 import pandas as pd
 from streamlit_autorefresh import st_autorefresh
@@ -13,13 +10,8 @@ st.set_page_config(
     layout="wide"
 )
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.dirname(BASE_DIR)
-
-TRAINING_METRICS_PATH = os.path.join(ROOT_DIR, "metrics", "training_metrics.json")
-PREDICTIONS_LOG_PATH = os.path.join(ROOT_DIR, "logs", "predictions.jsonl")
-
-API_URL = "https://user-intent-api.onrender.com/predict"
+API_BASE = "https://user-intent-api.onrender.com"
+API_URL = f"{API_BASE}/predict"
 LOCAL_API_URL = "http://localhost:8000/predict"
 
 CONFIDENCE_THRESHOLD = 0.108
@@ -31,28 +23,23 @@ refresh = st.sidebar.checkbox("🔄 Live Monitoring", value=True)
 if refresh:
     st_autorefresh(interval=5000, key="refresh")
 
-# HELPERS
+# FETCH DATA FROM API
 
-def load_json(path):
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-    return None
+def fetch_metrics():
+    try:
+        res = requests.get(f"{API_BASE}/metrics", timeout=10)
+        return res.json()
+    except:
+        return None
 
 
-def load_predictions(path):
-    if not os.path.exists(path):
+def fetch_logs():
+    try:
+        res = requests.get(f"{API_BASE}/monitor/logs", timeout=10)
+        data = res.json()
+        return pd.DataFrame(data) if data else pd.DataFrame()
+    except:
         return pd.DataFrame()
-
-    rows = []
-    with open(path, "r") as f:
-        for line in f:
-            try:
-                rows.append(json.loads(line))
-            except:
-                pass
-
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 # UI START
 
@@ -62,20 +49,20 @@ st.title("🧠 User Intent Monitoring Dashboard")
 
 st.header("📊 Training Metrics")
 
-metrics = load_json(TRAINING_METRICS_PATH)
+metrics = fetch_metrics()
 
-if metrics:
+if metrics and "accuracy" in metrics:
     c1, c2, c3 = st.columns(3)
 
     c1.metric("Accuracy", round(metrics.get("accuracy", 0), 4))
     c2.metric("F1 Score", round(metrics.get("f1_score", 0), 4))
-    c3.metric("Loss", round(metrics.get("loss", 0), 4))
+    c3.metric("Model", metrics.get("model", "N/A"))
 else:
-    st.warning("training_metrics.json not found")
+    st.warning("Metrics not available from API.")
 
 # LOAD LOG DATA
 
-df_logs = load_predictions(PREDICTIONS_LOG_PATH)
+df_logs = fetch_logs()
 
 # LOW CONFIDENCE MONITORING
 
@@ -83,9 +70,7 @@ st.header("🚫 Low Confidence Monitoring")
 
 if not df_logs.empty and "confidence" in df_logs.columns:
 
-    confidence_series = df_logs["confidence"]
-
-    rejected_count = (confidence_series < CONFIDENCE_THRESHOLD).sum()
+    rejected_count = (df_logs["confidence"] < CONFIDENCE_THRESHOLD).sum()
 
     col1, col2, col3 = st.columns(3)
 
@@ -105,27 +90,18 @@ st.header("📉 Confidence Distribution")
 
 if not df_logs.empty and "confidence" in df_logs.columns:
 
-    confidence_series = df_logs["confidence"]
-
     col1, col2 = st.columns(2)
 
-    # ---- LINE CHART ----
     with col1:
         st.subheader("Confidence Over Time")
-        st.line_chart(confidence_series, height=300)
+        st.line_chart(df_logs["confidence"], height=300)
 
-    # ---- HISTOGRAM ----
     with col2:
         st.subheader("Confidence Histogram")
-
-        hist_df = pd.DataFrame({
-            "confidence": confidence_series
-        })
-
         st.bar_chart(
-            hist_df["confidence"].value_counts(
-                bins=20
-            ).sort_index(),
+            df_logs["confidence"]
+            .value_counts(bins=20)
+            .sort_index(),
             height=300
         )
 
@@ -133,7 +109,6 @@ else:
     st.info("No confidence data available.")
 
 # LATEST PREDICTION
-
 
 st.header("⚡ Latest Prediction")
 
@@ -144,6 +119,8 @@ if not df_logs.empty:
 
     c1.metric("Intent", last.get("predicted_intent", "N/A"))
     c2.metric("Confidence", round(last.get("confidence", 0), 4))
+else:
+    st.info("No predictions logged yet.")
 
 # RECENT TABLE
 
