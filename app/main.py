@@ -28,8 +28,8 @@ VECTORIZER_PATH = MODEL_DIR / "tfidf_v1.pkl"
 
 app = FastAPI(
     title="User Intent Classification API",
-    description="Predicts user intent with confidence and logs rejected predictions",
-    version="2.0.0"
+    description="Predicts user intent with full prediction logging & monitoring",
+    version="3.0.0"
 )
 
 # LOAD MODEL
@@ -53,18 +53,19 @@ class IntentResponse(BaseModel):
     confidence: float
 
 # UTILITIES
-
 def clean_text(text: str) -> str:
     text = text.lower()
     text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
     return text
 
-def log_rejected_prediction(text, confidence):
+
+def log_prediction(text, predicted_intent, confidence, is_rejected):
     log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "text": text,
-        "predicted_intent": "not_identified",
-        "confidence": confidence
+        "predicted_intent": predicted_intent,
+        "confidence": confidence,
+        "is_rejected": is_rejected
     }
 
     with open(LOG_FILE, "a") as f:
@@ -75,6 +76,7 @@ def log_rejected_prediction(text, confidence):
 @app.get("/")
 def home():
     return {"message": "Intent Classification API is running"}
+
 
 @app.get("/health")
 def health():
@@ -96,10 +98,14 @@ def predict_intent(request: IntentRequest):
     predicted_class = model.classes_[np.argmax(probs)]
     confidence = float(np.max(probs))
 
-    # Threshold logic
-    if confidence < CONFIDENCE_THRESHOLD:
+    # Determine rejection
+    is_rejected = confidence < CONFIDENCE_THRESHOLD
+
+    if is_rejected:
         predicted_class = "not_identified"
-        log_rejected_prediction(request.text, confidence)
+
+    # Log ALL predictions
+    log_prediction(request.text, predicted_class, confidence, is_rejected)
 
     return {
         "intent": predicted_class,
@@ -130,6 +136,7 @@ def get_stats():
 
     if not LOG_FILE.exists():
         return {
+            "total_predictions": 0,
             "total_rejected": 0,
             "average_confidence": 0
         }
@@ -138,12 +145,14 @@ def get_stats():
 
     if df.empty:
         return {
+            "total_predictions": 0,
             "total_rejected": 0,
             "average_confidence": 0
         }
 
     return {
-        "total_rejected": len(df),
+        "total_predictions": len(df),
+        "total_rejected": int(df["is_rejected"].sum()),
         "average_confidence": round(float(df["confidence"].mean()), 4)
     }
 
@@ -188,7 +197,8 @@ def drift_status():
     return {
         "baseline_distribution": baseline,
         "current_distribution": current_distribution,
-        "num_rejected_predictions": len(logs)
+        "total_predictions": len(logs),
+        "rejection_rate": round(float(logs["is_rejected"].mean()), 4)
     }
 
 
